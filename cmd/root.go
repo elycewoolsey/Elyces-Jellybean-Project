@@ -1,6 +1,10 @@
+// Package cmd implements the fileops subcommands (create, copy, combine,
+// delete) and their shared validation and error handling.
 package cmd
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -10,8 +14,12 @@ var rootCmd = &cobra.Command{
 	Long:  `Create, delete, combine, and copy files.`,
 }
 
+// Execute runs the root command and exits with a non-zero status on error.
+// Cobra prints the error message itself.
 func Execute() {
-	cobra.CheckErr(rootCmd.Execute())
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 
 func init() {

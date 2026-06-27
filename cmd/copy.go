@@ -1,90 +1,93 @@
 package cmd
 
 import (
-	"bufio"
-	"errors"
-	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-var copyCmd = &cobra.Command{
-	Use:   "copy [src] [dst]",
-	Short: "Copy a file",
-	Args:  cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		src, dst := args[0], args[1]
-		force, _ := cmd.Flags().GetBool("force")
+var copyCmd = newCopyCmd()
 
-		if err := validateFilename(src); err != nil {
-			return err
-		}
-		if err := validateFilename(dst); err != nil {
-			return err
-		}
+func newCopyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "copy [src] [dst]",
+		Short: "Copy a file, prompting on overwrite unless -f",
+		Long: `Copy a file from src to dst.
 
-		if err := validateExtension(dst); err != nil {
-			return err
-		}
+The destination name is validated and both paths are checked against the
+platform path-length limit. If dst already exists, a Y/N prompt is shown
+unless --force is given. The destination keeps the source's permission bits.
+Symlinks are followed; the link target is copied, not the link itself.`,
+		Example: `  fileops copy a.txt b.txt
+  fileops copy a.txt b.txt -f`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			src, dst := args[0], args[1]
+			force, _ := cmd.Flags().GetBool("force")
 
-		if err := validatePathLength(dst); err != nil {
-			return err
-		}
-
-		if _, err := os.Stat(src); err != nil {
-			if os.IsNotExist(err) {
-				return ErrFileNotFound
+			if err := validateFilename(dst); err != nil {
+				return err
 			}
-			if os.IsPermission(err) {
-				return ErrPermissionDenied
+			if err := validateExtension(dst); err != nil {
+				return err
 			}
-			return err
-		}
+			if err := validatePathLength(src); err != nil {
+				return err
+			}
+			if err := validatePathLength(dst); err != nil {
+				return err
+			}
 
-		if !force {
-			if _, err := os.Stat(dst); err == nil {
-				fmt.Print("Do you want to overwrite the file [Y/N]? ")
-				scanner := bufio.NewScanner(cmd.InOrStdin())
-				scanner.Scan()
-				response := strings.ToUpper(strings.TrimSpace(scanner.Text()))
-				if response != "Y" && response != "YES" {
-					return errors.New("copy cancelled")
+			info, err := os.Stat(src)
+			if err != nil {
+				return mapOSError(err)
+			}
+			if info.IsDir() {
+				return ErrIsDirectory
+			}
+
+			if !force {
+				if _, err := os.Stat(dst); err == nil {
+					if !confirm(cmd, "Do you want to overwrite the file [Y/N]? ") {
+						return ErrCopyCancelled
+					}
 				}
 			}
-		}
 
-		inFile, err := os.Open(src)
-		if err != nil {
-			if os.IsPermission(err) {
-				return ErrPermissionDenied
-			}
-			return err
-		}
-		defer inFile.Close()
-
-		outFile, err := os.Create(dst)
-		if err != nil {
-			if os.IsPermission(err) {
-				return ErrPermissionDenied
-			}
-			return err
-		}
-		defer outFile.Close()
-
-		_, err = io.Copy(outFile, inFile)
-		if err != nil {
-			if os.IsPermission(err) {
-				return ErrPermissionDenied
-			}
-			return err
-		}
-		return nil
-	},
+			return copyFile(src, dst, info.Mode())
+		},
+	}
+	cmd.Flags().BoolP("force", "f", false, "Overwrite destination without prompt")
+	return cmd
 }
 
-func init() {
-	copyCmd.Flags().BoolP("force", "f", false, "Overwrite destination if exists")
+// copyFile copies src to dst, giving dst the same permission bits as src.
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return mapOSError(err)
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return mapOSError(err)
+	}
+
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return mapOSError(err)
+	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return mapOSError(err)
+	}
+	if err := out.Close(); err != nil {
+		return mapOSError(err)
+	}
+
+	// Ensure mode matches even when dst already existed (O_TRUNC keeps the
+	// old file's mode).
+	return mapOSError(os.Chmod(dst, mode))
 }

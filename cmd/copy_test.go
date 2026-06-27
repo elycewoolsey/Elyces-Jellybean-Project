@@ -1,21 +1,18 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 func TestCopyCommand(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	tests := []struct {
 		name        string
-		setup       func() (string, string)
+		setup       func(t *testing.T) (src, dst string)
 		flags       map[string]string
 		input       string
 		wantContent string
@@ -23,10 +20,13 @@ func TestCopyCommand(t *testing.T) {
 	}{
 		{
 			name: "copy file",
-			setup: func() (string, string) {
-				src := filepath.Join(tmpDir, "src.txt")
-				dst := filepath.Join(tmpDir, "dst.txt")
-				os.WriteFile(src, []byte("hello"), 0644)
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				src := filepath.Join(dir, "src.txt")
+				dst := filepath.Join(dir, "dst.txt")
+				if err := os.WriteFile(src, []byte("hello"), 0644); err != nil {
+					t.Fatal(err)
+				}
 				return src, dst
 			},
 			flags:       map[string]string{},
@@ -34,11 +34,16 @@ func TestCopyCommand(t *testing.T) {
 		},
 		{
 			name: "copy with force overwrite",
-			setup: func() (string, string) {
-				src := filepath.Join(tmpDir, "src.txt")
-				dst := filepath.Join(tmpDir, "dst.txt")
-				os.WriteFile(src, []byte("new content"), 0644)
-				os.WriteFile(dst, []byte("old content"), 0644)
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				src := filepath.Join(dir, "src.txt")
+				dst := filepath.Join(dir, "dst.txt")
+				if err := os.WriteFile(src, []byte("new content"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(dst, []byte("old content"), 0644); err != nil {
+					t.Fatal(err)
+				}
 				return src, dst
 			},
 			flags:       map[string]string{"force": "true"},
@@ -46,44 +51,58 @@ func TestCopyCommand(t *testing.T) {
 		},
 		{
 			name: "invalid chars in destination",
-			setup: func() (string, string) {
-				src := filepath.Join(tmpDir, "src.txt")
-				dst := filepath.Join(tmpDir, "dst<file>.txt")
-				os.WriteFile(src, []byte("content"), 0644)
-				return src, dst
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				src := filepath.Join(dir, "src.txt")
+				if err := os.WriteFile(src, []byte("content"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				return src, filepath.Join(dir, "dst<file>.txt")
 			},
 			flags:   map[string]string{},
-			wantErr: ErrInvalidChars,
+			wantErr: ErrInvalidChar,
 		},
 		{
 			name: "invalid extension in destination",
-			setup: func() (string, string) {
-				src := filepath.Join(tmpDir, "src.txt")
-				dst := filepath.Join(tmpDir, "dst.exe")
-				os.WriteFile(src, []byte("content"), 0644)
-				return src, dst
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				src := filepath.Join(dir, "src.txt")
+				if err := os.WriteFile(src, []byte("content"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				return src, filepath.Join(dir, "dst.exe")
 			},
 			flags:   map[string]string{},
 			wantErr: ErrInvalidExtension,
 		},
 		{
 			name: "source not found",
-			setup: func() (string, string) {
-				src := filepath.Join(tmpDir, "missing.txt")
-				dst := filepath.Join(tmpDir, "dst.txt")
-				return src, dst
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				return filepath.Join(dir, "missing.txt"), filepath.Join(dir, "dst.txt")
 			},
 			flags:   map[string]string{},
 			wantErr: ErrFileNotFound,
 		},
 		{
 			name: "destination path too long",
-			setup: func() (string, string) {
-				src := filepath.Join(tmpDir, "src.txt")
-				os.WriteFile(src, []byte("content"), 0644)
-				longName := strings.Repeat("a", 300) + ".txt"
-				dst := filepath.Join(tmpDir, longName)
-				return src, dst
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				src := filepath.Join(dir, "src.txt")
+				if err := os.WriteFile(src, []byte("content"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				return src, filepath.Join(dir, strings.Repeat("a", 5000)+".txt")
+			},
+			flags:   map[string]string{},
+			wantErr: ErrNameTooLong,
+		},
+		{
+			name: "source path too long",
+			setup: func(t *testing.T) (string, string) {
+				dir := t.TempDir()
+				longSrc := filepath.Join(dir, strings.Repeat("b", 5000)+".txt")
+				return longSrc, filepath.Join(dir, "dst.txt")
 			},
 			flags:   map[string]string{},
 			wantErr: ErrNameTooLong,
@@ -92,25 +111,20 @@ func TestCopyCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src, dst := tt.setup()
+			src, dst := tt.setup(t)
 
-			cmd := copyCmd
-			cmd.SetArgs([]string{src, dst})
-			for k, v := range tt.flags {
-				cmd.Flags().Set(k, v)
-			}
+			c := newCopyCmd()
+			c.SetArgs([]string{src, dst})
+			setFlags(t, c, tt.flags)
+			runWithStdin(c, tt.input)
 
-			if tt.input != "" {
-				cmd.SetIn(strings.NewReader(tt.input))
-			}
-
-			err := cmd.RunE(cmd, []string{src, dst})
+			err := c.RunE(c, []string{src, dst})
 			if tt.wantErr != nil {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !strings.Contains(err.Error(), tt.wantErr.Error()) {
-					t.Fatalf("expected error containing %q, got %q", tt.wantErr.Error(), err.Error())
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
 				}
 				return
 			}
@@ -130,62 +144,50 @@ func TestCopyCommand(t *testing.T) {
 }
 
 func TestCopyCommandPrompt(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	makeCmd := func(stdin string) *cobra.Command {
-		cmd := &cobra.Command{
-			Use:   "copy [src] [dst]",
-			Short: "Copy a file",
-			Args:  cobra.ExactArgs(2),
-			RunE:  copyCmd.RunE,
-		}
-		cmd.Flags().BoolP("force", "f", false, "Overwrite destination if exists")
-		cmd.SetIn(strings.NewReader(stdin))
-		return cmd
+	tests := []struct {
+		name        string
+		input       string
+		wantErr     error
+		wantContent string
+	}{
+		{name: "yes overwrites", input: "Y\n", wantContent: "new"},
+		{name: "YES overwrites", input: "YES\n", wantContent: "new"},
+		{name: "no cancels", input: "N\n", wantErr: ErrCopyCancelled, wantContent: "old"},
+		{name: "empty input cancels", input: "", wantErr: ErrCopyCancelled, wantContent: "old"},
+		{name: "eof cancels", input: "", wantErr: ErrCopyCancelled, wantContent: "old"},
 	}
 
-	t.Run("overwrite prompt - yes", func(t *testing.T) {
-		src := filepath.Join(tmpDir, "src.txt")
-		dst := filepath.Join(tmpDir, "dst.txt")
-		os.WriteFile(src, []byte("new"), 0644)
-		os.WriteFile(dst, []byte("old"), 0644)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			src := filepath.Join(dir, "src.txt")
+			dst := filepath.Join(dir, "dst.txt")
+			if err := os.WriteFile(src, []byte("new"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(dst, []byte("old"), 0644); err != nil {
+				t.Fatal(err)
+			}
 
-		cmd := makeCmd("Y\n")
-		cmd.SetArgs([]string{src, dst})
+			c := newCopyCmd()
+			c.SetArgs([]string{src, dst})
+			runWithStdin(c, tt.input)
 
-		err := cmd.RunE(cmd, []string{src, dst})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+			err := c.RunE(c, []string{src, dst})
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected %v, got %v", tt.wantErr, err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-		content, _ := os.ReadFile(dst)
-		if string(content) != "new" {
-			t.Errorf("expected 'new', got %q", string(content))
-		}
-	})
-
-	t.Run("overwrite prompt - no", func(t *testing.T) {
-		src := filepath.Join(tmpDir, "src2.txt")
-		dst := filepath.Join(tmpDir, "dst2.txt")
-		os.WriteFile(src, []byte("new"), 0644)
-		os.WriteFile(dst, []byte("old"), 0644)
-
-		cmd := makeCmd("N\n")
-		cmd.SetArgs([]string{src, dst})
-
-		err := cmd.RunE(cmd, []string{src, dst})
-		if err == nil {
-			t.Fatal("expected cancellation error")
-		}
-		if !strings.Contains(err.Error(), "copy cancelled") {
-			t.Fatalf("expected copy cancelled, got %q", err.Error())
-		}
-
-		content, _ := os.ReadFile(dst)
-		if string(content) != "old" {
-			t.Errorf("expected 'old' (unchanged), got %q", string(content))
-		}
-	})
+			content, _ := os.ReadFile(dst)
+			if string(content) != tt.wantContent {
+				t.Errorf("content = %q, want %q", string(content), tt.wantContent)
+			}
+		})
+	}
 }
 
 func TestCopyCommandPermissionDenied(t *testing.T) {
@@ -193,42 +195,101 @@ func TestCopyCommandPermissionDenied(t *testing.T) {
 		t.Skip("Skipping permission test on Windows")
 	}
 
-	tmpDir := t.TempDir()
-	restrictedDir := filepath.Join(tmpDir, "restricted")
-	os.Mkdir(restrictedDir, 0000)
-	defer os.Chmod(restrictedDir, 0700)
-
 	t.Run("read permission denied", func(t *testing.T) {
-		src := filepath.Join(restrictedDir, "src.txt")
-		dst := filepath.Join(tmpDir, "dst.txt")
-		os.WriteFile(src, []byte("content"), 0644)
-
-		cmd := copyCmd
-		cmd.SetArgs([]string{src, dst})
-
-		err := cmd.RunE(cmd, []string{src, dst})
-		if err == nil {
-			t.Fatal("expected permission denied")
+		dir := t.TempDir()
+		restricted := filepath.Join(dir, "restricted")
+		if err := os.Mkdir(restricted, 0755); err != nil {
+			t.Fatal(err)
 		}
-		if !strings.Contains(err.Error(), "Permission denied") {
-			t.Fatalf("expected permission denied, got %q", err.Error())
+		// Create the file while the directory is still writable.
+		src := filepath.Join(restricted, "src.txt")
+		if err := os.WriteFile(src, []byte("content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		// Now lock down the directory so the file cannot be read.
+		if err := os.Chmod(restricted, 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(restricted, 0755)
+
+		dst := filepath.Join(dir, "dst.txt")
+		c := newCopyCmd()
+		c.SetArgs([]string{src, dst})
+
+		err := c.RunE(c, []string{src, dst})
+		if !errors.Is(err, ErrPermissionDenied) {
+			t.Fatalf("expected ErrPermissionDenied, got %v", err)
 		}
 	})
 
 	t.Run("write permission denied", func(t *testing.T) {
-		src := filepath.Join(tmpDir, "src.txt")
-		dst := filepath.Join(restrictedDir, "dst.txt")
-		os.WriteFile(src, []byte("content"), 0644)
-
-		cmd := copyCmd
-		cmd.SetArgs([]string{src, dst})
-
-		err := cmd.RunE(cmd, []string{src, dst})
-		if err == nil {
-			t.Fatal("expected permission denied")
+		dir := t.TempDir()
+		src := filepath.Join(dir, "src.txt")
+		if err := os.WriteFile(src, []byte("content"), 0644); err != nil {
+			t.Fatal(err)
 		}
-		if !strings.Contains(err.Error(), "Permission denied") {
-			t.Fatalf("expected permission denied, got %q", err.Error())
+
+		restricted := filepath.Join(dir, "restricted")
+		if err := os.Mkdir(restricted, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(restricted, 0555); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(restricted, 0755)
+
+		dst := filepath.Join(restricted, "dst.txt")
+		c := newCopyCmd()
+		c.SetArgs([]string{src, dst})
+
+		err := c.RunE(c, []string{src, dst})
+		if !errors.Is(err, ErrPermissionDenied) {
+			t.Fatalf("expected ErrPermissionDenied, got %v", err)
 		}
 	})
+}
+
+func TestCopyPreservesMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping mode test on Windows")
+	}
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.sh")
+	dst := filepath.Join(dir, "dst.sh")
+	if err := os.WriteFile(src, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	c := newCopyCmd()
+	c.SetArgs([]string{src, dst})
+
+	if err := c.RunE(c, []string{src, dst}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0755 {
+		t.Errorf("dst mode = %o, want 0755", info.Mode().Perm())
+	}
+}
+
+func TestCopyDirectoryReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "subdir")
+	if err := os.Mkdir(srcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "dst.txt")
+
+	c := newCopyCmd()
+	c.SetArgs([]string{srcDir, dst})
+
+	err := c.RunE(c, []string{srcDir, dst})
+	if !errors.Is(err, ErrIsDirectory) {
+		t.Fatalf("expected ErrIsDirectory, got %v", err)
+	}
 }
