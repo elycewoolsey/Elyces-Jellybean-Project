@@ -19,8 +19,8 @@ The destination name is validated and both paths are checked against the
 platform path-length limit. If dst already exists, a Y/N prompt is shown
 unless --force is given. The destination keeps the source's permission bits.
 Symlinks are followed; the link target is copied, not the link itself.`,
-		Example: `  fileops copy a.txt b.txt
-  fileops copy a.txt b.txt -f`,
+		Example: `  jellybeans copy a.txt b.txt
+  jellybeans copy a.txt b.txt -f`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			src, dst := args[0], args[1]

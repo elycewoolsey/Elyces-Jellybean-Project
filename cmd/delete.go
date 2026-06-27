@@ -18,8 +18,8 @@ func newDeleteCmd() *cobra.Command {
 Unless --force is given, a Y/N prompt is shown before anything is removed.
 Deletion is fail-fast: it stops at the first error and leaves the remaining
 files untouched. A symlink is removed itself, not the file it points to.`,
-		Example: `  fileops delete junk.txt
-  fileops delete a.txt b.txt -f`,
+		Example: `  jellybeans delete junk.txt
+  jellybeans delete a.txt b.txt -f`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")

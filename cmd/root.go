@@ -1,4 +1,4 @@
-// Package cmd implements the fileops subcommands (create, copy, combine,
+// Package cmd implements the jellybeans subcommands (create, copy, combine,
 // delete) and their shared validation and error handling.
 package cmd
 
@@ -9,7 +9,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "fileops",
+	Use:   "jellybeans",
 	Short: "File operations CLI",
 	Long:  `Create, delete, combine, and copy files.`,
 }

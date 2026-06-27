@@ -20,8 +20,8 @@ The write is atomic: content goes to a temporary file that is renamed into
 place only on success, so the output is never left half-written. Files are
 joined in order, with the optional delimiter inserted between them. If the
 output already exists, a Y/N prompt is shown unless --force is given.`,
-		Example: `  fileops combine a.txt b.txt
-  fileops combine a.txt b.txt -o out.txt -d "\n"`,
+		Example: `  jellybeans combine a.txt b.txt
+  jellybeans combine a.txt b.txt -o out.txt -d "\n"`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			output, _ := cmd.Flags().GetString("output")
