@@ -1,4 +1,4 @@
-module fileops
+module jellybeans
 
 go 1.22
 

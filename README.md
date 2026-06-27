@@ -1,4 +1,4 @@
-# fileops
+# jellybeans
 
 File operations CLI tool built with Go and Cobra.
 
@@ -11,7 +11,7 @@ File operations CLI tool built with Go and Cobra.
 | `combine [files...]` | Combine multiple files into one (`-o` output, `-d` delimiter). Atomic via temp + rename. Prompts on overwrite unless `-f`. |
 | `delete [files...]` | Delete one or more files. Prompts unless `-f`. Fail-fast on first error. |
 
-Run `fileops <command> --help` for full details and examples.
+Run `jellybeans <command> --help` for full details and examples.
 
 ## Flags
 
@@ -88,7 +88,7 @@ Permission, mode, and symlink tests are skipped on Windows. The Windows reserved
 ## Build
 
 ```bash
-go build -o fileops .
+go build -o jellybeans .
 ```
 
 ## Install Go
