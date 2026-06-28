@@ -49,8 +49,11 @@ jobs:
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
       - name: Add Go bin to PATH
         run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
       - name: Create .deb package
-        run: nfpm pkg --packager deb --target .
+        run: nfpm pkg --packager deb --target . --version "${{ steps.version.outputs.VERSION }}"
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:

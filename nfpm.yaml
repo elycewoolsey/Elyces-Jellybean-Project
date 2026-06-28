@@ -1,5 +1,5 @@
 name: "jellybeans"
-version: "0.1.0"
+version: ""
 version_schema: "semver"
 section: "utils"
 priority: "optional"
