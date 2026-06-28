@@ -1,5 +1,5 @@
 name: "jellybeans"
-version: "{{ .Version }}"
+version: "${GITHUB_REF_NAME}"
 version_schema: "semver"
 section: "utils"
 priority: "optional"
