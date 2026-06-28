@@ -1,0 +1,15 @@
+on:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+      - run: go build -o jellybeans -ldflags="-s -w" .
+      - run: nfpm pkg --packager deb --target .
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: jellybeans_*.deb
