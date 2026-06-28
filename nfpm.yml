@@ -9,5 +9,9 @@ homepage: "https://github.com/elycewoolsey/Elyces-Jellybean-Project"
 license: "MIT"
 arch: "amd64"
 platform: "linux"
-bindir: "/usr/bin"
-binary: "jellybeans"
+
+contents:
+  - src: "jellybeans"
+    dst: "/usr/bin/jellybeans"
+    file_info:
+      mode: 0755
