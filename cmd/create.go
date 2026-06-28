@@ -49,10 +49,10 @@ func newCreateCmd() *cobra.Command {
 
 The filename is validated and an existing file is rejected unless --force is
 given. Use --mode to set the file permission bits (octal, default 0644).`,
-		Example: `  fileops create notes.txt
-  fileops create greeting.txt -c "hello world"
-  fileops create over.txt -c "x" -f
-  fileops create script.sh -m 0755`,
+		Example: `  jellybeans create notes.txt
+  jellybeans create greeting.txt -c "hello world"
+  jellybeans create over.txt -c "x" -f
+  jellybeans create script.sh -m 0755`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content, _ := cmd.Flags().GetString("content")
