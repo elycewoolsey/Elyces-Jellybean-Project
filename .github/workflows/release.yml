@@ -47,6 +47,8 @@ jobs:
           name: jellybeans-binary
       - name: Install nfpm
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Create .deb package
         run: nfpm pkg --packager deb --target .
       - name: Upload .deb artifact
